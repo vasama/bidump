@@ -1,0 +1,11 @@
+build/
+bin/
+lib/
+
+### Visual Studio ###
+.vs/
+[Dd]ebug/
+[Rr]elease/
+
+### Visual Studio Code ###
+.vscode/
