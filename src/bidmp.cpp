@@ -1,11 +1,12 @@
 #include "bidmp.hpp"
 
-#include "indent.hpp"
 #include "read.hpp"
 
+#include <algorithm>
 #include <array>
 #include <iterator>
 #include <map>
+#include <ostream>
 #include <string>
 #include <string_view>
 #include <tuple>
@@ -197,7 +198,6 @@ bool read(Iterator& first, const Iterator& last, code& out)
 struct stack
 {
 	u32 base;
-	i32 size;
 
 	std::vector<
 		std::byte
@@ -209,22 +209,18 @@ bool read(Iterator& first, const Iterator& last, stack& out)
 {
 	Iterator local = first;
 
+	i32 size;
 	if (!read(local, last, out.base) ||
-		!read(local, last, out.size))
+		!read(local, last, size))
 		return false;
 
-	out.data.resize(out.size);
+	out.data.resize(size);
 	if (!read(local, last, out.data.begin(), out.data.end()))
 		return false;
 
 	first = local;
 	return true;
 }
-
-typedef std::tuple<std::string_view, i32, i32> VersionIdentifier;
-const std::map<VersionIdentifier, u32> KnownFunctionOffsets = {
-		{ { "arma2oaserver.exe", 163, 131129 }, 0x00187177 },
-	};
 
 struct bidmp
 {
@@ -267,15 +263,74 @@ bidmp_ptr read_bidmp(const std::byte* data, std::size_t size)
 	return ptr;
 }
 
-struct ptr
-{
-	u32 addr;
 
+typedef std::tuple<std::string_view, i32, i32> VersionIdentifier;
+const std::map<VersionIdentifier, u32> KnownFunctionOffsets = {
+	{ { "arma2oaserver.exe", 163, 131129 }, 0x00187177 },
+};
+
+class ptr
+{
+	u32 m_addr;
+
+public:
+	ptr(u32 addr)
+		: m_addr(addr)
+	{
+	}
+	
 	friend std::ostream& operator<<(std::ostream& os, const ptr& p)
 	{
 		std::array<char, 9> buffer;
-		std::snprintf(buffer.data(), buffer.size(), "%08X", p.addr);
+		std::snprintf(buffer.data(), buffer.size(), "%08X", p.m_addr);
 		return os << std::string_view(buffer.data(), buffer.size() - 1);
+	}
+};
+
+class indent
+{
+	std::string m_indent;
+	int m_depth = 0;
+
+public:
+	indent(std::string indent)
+		: m_indent(indent)
+	{
+	}
+
+	int depth() const
+	{
+		return m_depth;
+	}
+
+	indent& operator+=(int i)
+	{
+		m_depth += i;
+		return *this;
+	}
+
+	indent& operator-=(int i)
+	{
+		m_depth = std::max(m_depth - i, 0);
+		return *this;
+	}
+
+	indent& operator++()
+	{
+		return (*this) += 1;
+	}
+
+	indent& operator--()
+	{
+		return (*this) -= 1;
+	}
+
+	friend std::ostream& operator<<(std::ostream& os, const indent& indent)
+	{
+		std::string_view view = indent.m_indent;
+		for (int i = 0, d = indent.m_depth; i < d; ++i)
+			os << view;
+		return os;
 	}
 };
 
@@ -329,11 +384,12 @@ std::ostream& print_bidmp(std::ostream& os, const bidmp& b)
 	u32 text_base = adjust == 0 ? 0 : b.code.base;
 	u32 text_size = adjust == 0 ? 0 : b.code.size;
 	
-	os << i << "Stack:" << lf;
-	++i;
 	auto stack_first = b.stack.data.data(),
 		stack_last = b.stack.data.data() + b.stack.data.size();
-	u32 addr = b.stack.base + b.stack.size;
+	u32 addr = b.stack.base - b.stack.data.size();
+	
+	os << i << "Stack:" << lf;
+	++i;
 	while (stack_first != stack_last)
 	{
 		u32 value;
@@ -345,7 +401,7 @@ std::ostream& print_bidmp(std::ostream& os, const bidmp& b)
 			os << " " << b.info.file << "+" << ptr{ value + adjust };
 		os << lf;
 
-		addr -= sizeof(u32);
+		addr += sizeof(u32);
 	}
 	--i;
 
