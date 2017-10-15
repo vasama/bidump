@@ -358,27 +358,6 @@ std::ostream& print_bidmp(std::ostream& os, const bidmp& b)
 
 	os << i << "Flags:" << lf;
 	++i;
-#if 0
-	os << i << "CF: " << (bool)(b.context.EFlags & 0b10000000000000000000000000000000) << lf;
-	os << i << "PF: " << (bool)(b.context.EFlags & 0b00100000000000000000000000000000) << lf;
-	os << i << "AF: " << (bool)(b.context.EFlags & 0b00001000000000000000000000000000) << lf;
-	os << i << "ZF: " << (bool)(b.context.EFlags & 0b00000010000000000000000000000000) << lf;
-	os << i << "SF: " << (bool)(b.context.EFlags & 0b00000001000000000000000000000000) << lf;
-	os << i << "TF: " << (bool)(b.context.EFlags & 0b00000000100000000000000000000000) << lf;
-	os << i << "IF: " << (bool)(b.context.EFlags & 0b00000000010000000000000000000000) << lf;
-	os << i << "DF: " << (bool)(b.context.EFlags & 0b00000000001000000000000000000000) << lf;
-	os << i << "OF: " << (bool)(b.context.EFlags & 0b00000000000100000000000000000000) << lf;
-#elif 0
-	os << i << "CF: " << (bool)(b.context.EFlags & 0b00000000000000000000000000000001) << lf;
-	os << i << "PF: " << (bool)(b.context.EFlags & 0b00000000000000000000000000000100) << lf;
-	os << i << "AF: " << (bool)(b.context.EFlags & 0b00000000000000000000000000010000) << lf;
-	os << i << "ZF: " << (bool)(b.context.EFlags & 0b00000000000000000000000001000000) << lf;
-	os << i << "SF: " << (bool)(b.context.EFlags & 0b00000000000000000000000010000000) << lf;
-	os << i << "TF: " << (bool)(b.context.EFlags & 0b00000000000000000000000100000000) << lf;
-	os << i << "IF: " << (bool)(b.context.EFlags & 0b00000000000000000000001000000000) << lf;
-	os << i << "DF: " << (bool)(b.context.EFlags & 0b00000000000000000000010000000000) << lf;
-	os << i << "OF: " << (bool)(b.context.EFlags & 0b00000000000000000000100000000000) << lf;
-#else
 	os << i << "CF: " << (bool)(b.context.EFlags & (1u <<  0)) << lf;
 	os << i << "PF: " << (bool)(b.context.EFlags & (1u <<  2)) << lf;
 	os << i << "AF: " << (bool)(b.context.EFlags & (1u <<  4)) << lf;
@@ -388,7 +367,6 @@ std::ostream& print_bidmp(std::ostream& os, const bidmp& b)
 	os << i << "IF: " << (bool)(b.context.EFlags & (1u <<  9)) << lf;
 	os << i << "DF: " << (bool)(b.context.EFlags & (1u << 10)) << lf;
 	os << i << "OF: " << (bool)(b.context.EFlags & (1u << 11)) << lf;
-#endif
 	--i;
 	os << lf;
 
