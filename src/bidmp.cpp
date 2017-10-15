@@ -3,9 +3,11 @@
 #include "indent.hpp"
 #include "read.hpp"
 
+#include <array>
 #include <iterator>
 #include <map>
-#include <sstream>
+#include <string>
+#include <string_view>
 #include <tuple>
 #include <type_traits>
 #include <utility>
@@ -44,7 +46,7 @@ bool read(Iterator& first, const Iterator& last, header& out)
 	if (!read(local, last, stkVersion) || stkVersion != StkVersion)
 		return false;
 
-	if (!read(first, last, out.version) || !read(first, last, out.build))
+	if (!read(local, last, out.version) || !read(local, last, out.build))
 		return false;
 
 	first = local;
@@ -138,6 +140,8 @@ bool read(Iterator& first, const Iterator& last, info& out)
 	out.file.resize(length);
 	if (!read(local, last, out.file.begin(), out.file.end()))
 		return false;
+	if (out.file.back() == 0)
+		out.file.pop_back();
 
 	if (!read(local, last, length))
 		return false;
@@ -145,6 +149,8 @@ bool read(Iterator& first, const Iterator& last, info& out)
 	out.source.resize(length);
 	if (!read(local, last, out.source.begin(), out.source.end()))
 		return false;
+	if (out.file.back() == 0)
+		out.file.pop_back();
 
 	if (!read(local, last, out.size))
 		return false;
@@ -215,8 +221,9 @@ bool read(Iterator& first, const Iterator& last, stack& out)
 	return true;
 }
 
-const std::map<std::tuple<i32, i32>, u32> KnownFunctionOffsets = {
-		{ { 163, 131129 }, 0x00187177 },
+typedef std::tuple<std::string_view, i32, i32> VersionIdentifier;
+const std::map<VersionIdentifier, u32> KnownFunctionOffsets = {
+		{ { "arma2oaserver.exe", 163, 131129 }, 0x00187177 },
 	};
 
 struct bidmp
@@ -260,7 +267,19 @@ bidmp_ptr read_bidmp(const std::byte* data, std::size_t size)
 	return ptr;
 }
 
-std::ostream& print_bidmp(std::ostream& os, const bidmp& b, u32 base_offset)
+struct ptr
+{
+	u32 addr;
+
+	friend std::ostream& operator<<(std::ostream& os, const ptr& p)
+	{
+		std::array<char, 9> buffer;
+		std::snprintf(buffer.data(), buffer.size(), "%08X", p.addr);
+		return os << std::string_view(buffer.data(), buffer.size() - 1);
+	}
+};
+
+std::ostream& print_bidmp(std::ostream& os, const bidmp& b)
 {
 	constexpr char lf = '\n';
 
@@ -271,14 +290,14 @@ std::ostream& print_bidmp(std::ostream& os, const bidmp& b, u32 base_offset)
 	os << i << "Registers:" << lf;
 	++i;
 	os << std::hex;
-	os << i << "EAX: " << b.context.Eax << lf;
-	os << i << "EBX: " << b.context.Ebx << lf;
-	os << i << "ECX: " << b.context.Ecx << lf;
-	os << i << "EDX: " << b.context.Edx << lf;
-	os << i << "EDI: " << b.context.Edi << lf;
-	os << i << "EBP: " << b.context.Ebp << lf;
-	os << i << "ESP: " << b.context.Esp << lf;
-	os << i << "EIP: " << b.context.Eip << lf;
+	os << i << "EAX: " << ptr{ b.context.Eax } << lf;
+	os << i << "EBX: " << ptr{ b.context.Ebx } << lf;
+	os << i << "ECX: " << ptr{ b.context.Ecx } << lf;
+	os << i << "EDX: " << ptr{ b.context.Edx } << lf;
+	os << i << "EDI: " << ptr{ b.context.Edi } << lf;
+	os << i << "EBP: " << ptr{ b.context.Ebp } << lf;
+	os << i << "ESP: " << ptr{ b.context.Esp } << lf;
+	os << i << "EIP: " << ptr{ b.context.Eip } << lf;
 	--i;
 	os << lf;
 
@@ -299,11 +318,11 @@ std::ostream& print_bidmp(std::ostream& os, const bidmp& b, u32 base_offset)
 	i32 adjust = 0;
 	{
 		auto it = KnownFunctionOffsets.find(
-			{ b.header.version, b.header.build });
+			{ b.info.file, b.header.version, b.header.build });
 		if (it != KnownFunctionOffsets.end())
 		{
 			u32 func = it->second;
-			adjust = (i32)b.code.func - (i32)func + base_offset;
+			adjust = (i32)b.code.func - (i32)func;
 		}
 	}
 
@@ -314,15 +333,19 @@ std::ostream& print_bidmp(std::ostream& os, const bidmp& b, u32 base_offset)
 	++i;
 	auto stack_first = b.stack.data.data(),
 		stack_last = b.stack.data.data() + b.stack.data.size();
+	u32 addr = b.stack.base + b.stack.size;
 	while (stack_first != stack_last)
 	{
 		u32 value;
 		if (!read(stack_first, stack_last, value))
 			break;
 
+		os << i << ptr{ addr } << " " << ptr{ value };
 		if (value >= text_base && value < text_base + text_size)
-			os << i << (value + adjust) << " .text" << lf;
-		else os << i << value << lf;
+			os << " " << b.info.file << "+" << ptr{ value + adjust };
+		os << lf;
+
+		addr -= sizeof(u32);
 	}
 	--i;
 

@@ -17,10 +17,9 @@ int main(int argc, char** argv)
 
 	try
 	{
-		po::options_description options("Available options");
+		po::options_description options("Usage: bidump <dump file>");
 		options.add_options()
 			("help,h", "Display help message")
-			("base-offset", po::value<std::uint32_t>()->default_value(0), "Main module base offset")
 			("input-file", po::value<std::vector<fs::path>>(), "Crash dump file")
 		;
 
@@ -47,21 +46,13 @@ int main(int argc, char** argv)
 		return 1;
 	}
 
-#if 0
 	if (varmap.count("input-file") == 0)
 	{
 		std::cerr << "Expected file name" << std::endl;
 		return 1;
 	}
-#endif
 
-	std::uint32_t base_offset = varmap["base-offset"].as<std::uint32_t>();
-
-#if 0
 	for (auto& path : varmap["input-file"].as<std::vector<fs::path>>())
-#else
-	auto path = fs::path("C:/Users/Lauri/Downloads/boba/arma2oaserver.bidmp");
-#endif
 	{
 		if (!fs::exists(path))
 		{
@@ -103,7 +94,7 @@ int main(int argc, char** argv)
 			std::cout << path << ":\n";
 			if (auto bidmp = read_bidmp(data.data(), data.size()))
 			{
-				print_bidmp(std::cout, *bidmp, base_offset);
+				print_bidmp(std::cout, *bidmp);
 				std::cout << "\n";
 			}
 			else
