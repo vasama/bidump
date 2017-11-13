@@ -15,11 +15,7 @@
 #include <vector>
 #include <cstddef>
 #include <cstdint>
-
-#include <cstdint>
-
-#define NOMINMAX
-#include <Windows.h>
+#include <cctype>
 
 typedef std::int32_t i32;
 typedef std::uint32_t u32;
@@ -54,8 +50,52 @@ bool read(Iterator& first, const Iterator& last, header& out)
 	return true;
 }
 
-struct context : _CONTEXT
+struct context
 {
+	struct floating_save_area
+	{
+		u32 control_word;
+		u32 status_word;
+		u32 tag_word;
+		u32 error_offset;
+		u32 error_selector;
+		u32 data_offset;
+		u32 data_selector;
+		std::byte register_area[80];
+		u32 spare0;
+	};
+
+	u32 context_flags;
+
+	u32 dr0;
+	u32 dr1;
+	u32 dr2;
+	u32 dr3;
+	u32 dr6;
+	u32 dr7;
+
+	floating_save_area fsa;
+
+	u32 eax;
+	u32 ebx;
+	u32 ecx;
+	u32 edx;
+	u32 esi;
+	u32 edi;
+	u32 ebp;
+	u32 esp;
+	u32 eip;
+
+	u32 seg_gs;
+	u32 seg_fs;
+	u32 seg_es;
+	u32 seg_ds;
+	u32 seg_cs;
+	u32 seg_ss;
+
+	u32 eflags;
+
+	std::byte extended_registers[512];
 };
 
 template<typename Iterator>
@@ -71,52 +111,52 @@ bool read(Iterator& first, const Iterator& last, context& out)
 		return false;
 	}
 
-	read(first, last, out.ContextFlags);
+	read(first, last, out.context_flags);
 
-	read(first, last, out.Dr0);
-	read(first, last, out.Dr1);
-	read(first, last, out.Dr2);
-	read(first, last, out.Dr3);
-	read(first, last, out.Dr6);
-	read(first, last, out.Dr7);
+	read(first, last, out.dr0);
+	read(first, last, out.dr1);
+	read(first, last, out.dr2);
+	read(first, last, out.dr3);
+	read(first, last, out.dr6);
+	read(first, last, out.dr7);
 
-	_FLOATING_SAVE_AREA& fsa = out.FloatSave;
+	auto& fsa = out.fsa;
 
-	read(first, last, fsa.ControlWord);
-	read(first, last, fsa.StatusWord);
-	read(first, last, fsa.TagWord);
-	read(first, last, fsa.ErrorOffset);
-	read(first, last, fsa.ErrorSelector);
-	read(first, last, fsa.DataOffset);
-	read(first, last, fsa.DataSelector);
+	read(first, last, fsa.control_word);
+	read(first, last, fsa.status_word);
+	read(first, last, fsa.tag_word);
+	read(first, last, fsa.error_offset);
+	read(first, last, fsa.error_selector);
+	read(first, last, fsa.data_offset);
+	read(first, last, fsa.data_selector);
 	read(first, last,
-		std::begin(fsa.RegisterArea),
-		std::end(fsa.RegisterArea)
+		std::begin(fsa.register_area),
+		std::end(fsa.register_area)
 	);
-	read(first, last, fsa.Spare0);
+	read(first, last, fsa.spare0);
 
-	read(first, last, out.SegGs);
-	read(first, last, out.SegFs);
-	read(first, last, out.SegEs);
-	read(first, last, out.SegDs);
+	read(first, last, out.seg_gs);
+	read(first, last, out.seg_fs);
+	read(first, last, out.seg_es);
+	read(first, last, out.seg_ds);
 
-	read(first, last, out.Edi);
-	read(first, last, out.Esi);
-	read(first, last, out.Ebx);
-	read(first, last, out.Edx);
-	read(first, last, out.Ecx);
-	read(first, last, out.Eax);
+	read(first, last, out.edi);
+	read(first, last, out.esi);
+	read(first, last, out.ebx);
+	read(first, last, out.edx);
+	read(first, last, out.ecx);
+	read(first, last, out.eax);
 
-	read(first, last, out.Ebp);
-	read(first, last, out.Eip);
-	read(first, last, out.SegCs);
-	read(first, last, out.EFlags);
-	read(first, last, out.Esp);
-	read(first, last, out.SegSs);
+	read(first, last, out.ebp);
+	read(first, last, out.eip);
+	read(first, last, out.seg_cs);
+	read(first, last, out.eflags);
+	read(first, last, out.esp);
+	read(first, last, out.seg_ss);
 
 	read(first, last,
-		std::begin(out.ExtendedRegisters),
-		std::end(out.ExtendedRegisters)
+		std::begin(out.extended_registers),
+		std::end(out.extended_registers)
 	);
 
 	return true;
@@ -345,28 +385,28 @@ std::ostream& print_bidmp(std::ostream& os, const bidmp& b)
 	os << i << "Registers:" << lf;
 	++i;
 	os << std::hex;
-	os << i << "EAX: " << ptr{ b.context.Eax } << lf;
-	os << i << "EBX: " << ptr{ b.context.Ebx } << lf;
-	os << i << "ECX: " << ptr{ b.context.Ecx } << lf;
-	os << i << "EDX: " << ptr{ b.context.Edx } << lf;
-	os << i << "EDI: " << ptr{ b.context.Edi } << lf;
-	os << i << "EBP: " << ptr{ b.context.Ebp } << lf;
-	os << i << "ESP: " << ptr{ b.context.Esp } << lf;
-	os << i << "EIP: " << ptr{ b.context.Eip } << lf;
+	os << i << "EAX: " << ptr{ b.context.eax } << lf;
+	os << i << "EBX: " << ptr{ b.context.ebx } << lf;
+	os << i << "ECX: " << ptr{ b.context.ecx } << lf;
+	os << i << "EDX: " << ptr{ b.context.edx } << lf;
+	os << i << "EDI: " << ptr{ b.context.edi } << lf;
+	os << i << "EBP: " << ptr{ b.context.ebp } << lf;
+	os << i << "ESP: " << ptr{ b.context.esp } << lf;
+	os << i << "EIP: " << ptr{ b.context.eip } << lf;
 	--i;
 	os << lf;
 
 	os << i << "Flags:" << lf;
 	++i;
-	os << i << "CF: " << (bool)(b.context.EFlags & (1u <<  0)) << lf;
-	os << i << "PF: " << (bool)(b.context.EFlags & (1u <<  2)) << lf;
-	os << i << "AF: " << (bool)(b.context.EFlags & (1u <<  4)) << lf;
-	os << i << "ZF: " << (bool)(b.context.EFlags & (1u <<  6)) << lf;
-	os << i << "SF: " << (bool)(b.context.EFlags & (1u <<  7)) << lf;
-	os << i << "TF: " << (bool)(b.context.EFlags & (1u <<  8)) << lf;
-	os << i << "IF: " << (bool)(b.context.EFlags & (1u <<  9)) << lf;
-	os << i << "DF: " << (bool)(b.context.EFlags & (1u << 10)) << lf;
-	os << i << "OF: " << (bool)(b.context.EFlags & (1u << 11)) << lf;
+	os << i << "CF: " << (bool)(b.context.eflags & (1u <<  0)) << lf;
+	os << i << "PF: " << (bool)(b.context.eflags & (1u <<  2)) << lf;
+	os << i << "AF: " << (bool)(b.context.eflags & (1u <<  4)) << lf;
+	os << i << "ZF: " << (bool)(b.context.eflags & (1u <<  6)) << lf;
+	os << i << "SF: " << (bool)(b.context.eflags & (1u <<  7)) << lf;
+	os << i << "TF: " << (bool)(b.context.eflags & (1u <<  8)) << lf;
+	os << i << "IF: " << (bool)(b.context.eflags & (1u <<  9)) << lf;
+	os << i << "DF: " << (bool)(b.context.eflags & (1u << 10)) << lf;
+	os << i << "OF: " << (bool)(b.context.eflags & (1u << 11)) << lf;
 	--i;
 	os << lf;
 
