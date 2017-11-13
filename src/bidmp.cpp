@@ -389,6 +389,7 @@ std::ostream& print_bidmp(std::ostream& os, const bidmp& b)
 	os << i << "EBX: " << ptr{ b.context.ebx } << lf;
 	os << i << "ECX: " << ptr{ b.context.ecx } << lf;
 	os << i << "EDX: " << ptr{ b.context.edx } << lf;
+	os << i << "ESI: " << ptr{ b.context.esi } << lf;
 	os << i << "EDI: " << ptr{ b.context.edi } << lf;
 	os << i << "EBP: " << ptr{ b.context.ebp } << lf;
 	os << i << "ESP: " << ptr{ b.context.esp } << lf;
