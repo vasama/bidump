@@ -304,10 +304,20 @@ bidmp_ptr read_bidmp(const std::byte* data, std::size_t size)
 }
 
 
-typedef std::tuple<std::string_view, i32, i32> VersionIdentifier;
-const std::map<VersionIdentifier, u32> KnownFunctionOffsets = {
+typedef std::tuple<std::string_view, i32, i32> version_identifier;
+const std::map<version_identifier, u32> known_function_offsets = {
 	{ { "arma2oaserver.exe", 163, 131129 }, 0x00187177 },
 };
+
+const u32* get_known_function_offset(std::string_view file, i32 version, i32 build)
+{
+	auto file_low = std::string{ file };
+	for (auto& x : file_low)
+		x = (std::string::value_type)std::tolower(x);
+	auto it = known_function_offsets.find({ file_low, version, build });
+	if (it != known_function_offsets.end()) return &(it->second);
+	return nullptr;
+}
 
 class ptr
 {
@@ -374,26 +384,47 @@ public:
 	}
 };
 
-std::ostream& print_bidmp(std::ostream& os, const bidmp& b)
+std::ostream& print_bidmp(std::ostream& os, const bidmp& b, std::uint32_t known_func)
 {
 	constexpr char lf = '\n';
 
 	indent i("  ");
 
-	os << i << b.info.file << " " << b.header.version << "." << b.header.build << lf << lf;
+	os << i << b.info.file << " " << b.header.version << "." << b.header.build;
+
+	i32 adjust = 0;
+	{
+		const u32* p_rva = get_known_function_offset(
+			b.info.file, b.header.version, b.header.build);
+		u32 rva = p_rva ? *p_rva : known_func;
+		if (rva != 0)
+		{
+			adjust = (i32)b.code.func - (i32)rva;
+			os << " @ " << ptr{ (u32)adjust };
+		}
+	}
+	os << lf << lf;
+
+	u32 text_base = adjust == 0 ? 0 : b.code.base;
+	u32 text_size = adjust == 0 ? 0 : b.code.size;
+
+	auto const print_rva = [&](u32 value) {
+		if (value >= text_base && value < text_base + text_size)
+			os << " " << b.info.file << "+" << ptr{ value - adjust };
+	};
 
 	os << i << "Registers:" << lf;
 	++i;
 	os << std::hex;
-	os << i << "EAX: " << ptr{ b.context.eax } << lf;
-	os << i << "EBX: " << ptr{ b.context.ebx } << lf;
-	os << i << "ECX: " << ptr{ b.context.ecx } << lf;
-	os << i << "EDX: " << ptr{ b.context.edx } << lf;
-	os << i << "ESI: " << ptr{ b.context.esi } << lf;
-	os << i << "EDI: " << ptr{ b.context.edi } << lf;
-	os << i << "EBP: " << ptr{ b.context.ebp } << lf;
-	os << i << "ESP: " << ptr{ b.context.esp } << lf;
-	os << i << "EIP: " << ptr{ b.context.eip } << lf;
+	os << i << "EAX: " << ptr{ b.context.eax }; print_rva(b.context.eax); os << lf;
+	os << i << "EBX: " << ptr{ b.context.ebx }; print_rva(b.context.ebx); os << lf;
+	os << i << "ECX: " << ptr{ b.context.ecx }; print_rva(b.context.ecx); os << lf;
+	os << i << "EDX: " << ptr{ b.context.edx }; print_rva(b.context.edx); os << lf;
+	os << i << "ESI: " << ptr{ b.context.esi }; print_rva(b.context.esi); os << lf;
+	os << i << "EDI: " << ptr{ b.context.edi }; print_rva(b.context.edi); os << lf;
+	os << i << "EBP: " << ptr{ b.context.ebp }; print_rva(b.context.ebp); os << lf;
+	os << i << "ESP: " << ptr{ b.context.esp }; print_rva(b.context.esp); os << lf;
+	os << i << "EIP: " << ptr{ b.context.eip }; print_rva(b.context.eip); os << lf;
 	--i;
 	os << lf;
 
@@ -411,20 +442,6 @@ std::ostream& print_bidmp(std::ostream& os, const bidmp& b)
 	--i;
 	os << lf;
 
-	i32 adjust = 0;
-	{
-		auto it = KnownFunctionOffsets.find(
-			{ b.info.file, b.header.version, b.header.build });
-		if (it != KnownFunctionOffsets.end())
-		{
-			u32 func = it->second;
-			adjust = (i32)b.code.func - (i32)func;
-		}
-	}
-
-	u32 text_base = adjust == 0 ? 0 : b.code.base;
-	u32 text_size = adjust == 0 ? 0 : b.code.size;
-	
 	auto stack_first = b.stack.data.data(),
 		stack_last = b.stack.data.data() + b.stack.data.size();
 	u32 addr = b.stack.base - b.stack.data.size();
@@ -438,8 +455,7 @@ std::ostream& print_bidmp(std::ostream& os, const bidmp& b)
 			break;
 
 		os << i << ptr{ addr } << " " << ptr{ value };
-		if (value >= text_base && value < text_base + text_size)
-			os << " " << b.info.file << "+" << ptr{ value - adjust };
+		print_rva(value);
 		os << lf;
 
 		addr += sizeof(u32);

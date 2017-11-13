@@ -21,6 +21,7 @@ int main(int argc, char** argv)
 		options.add_options()
 			("help,h", "Display help message")
 			("input-file", po::value<std::vector<fs::path>>(), "Crash dump file")
+			("known-func", po::value<std::string>(), "RVA of the known function")
 		;
 
 		po::positional_options_description args;
@@ -50,6 +51,22 @@ int main(int argc, char** argv)
 	{
 		std::cerr << "Expected file name" << std::endl;
 		return 1;
+	}
+
+	std::uint32_t known_func = 0;
+	if (varmap.count("known-func") > 0)
+	{
+		std::string string = varmap["known-func"].as<std::string>();
+
+		try
+		{
+			known_func = std::stoul(string, nullptr, 16);
+		}
+		catch (...)
+		{
+			std::cerr << "Invalid known function address";
+			return 1;
+		}
 	}
 
 	for (auto& path : varmap["input-file"].as<std::vector<fs::path>>())
@@ -94,7 +111,7 @@ int main(int argc, char** argv)
 			std::cout << path << ":\n";
 			if (auto bidmp = read_bidmp(data.data(), data.size()))
 			{
-				print_bidmp(std::cout, *bidmp);
+				print_bidmp(std::cout, *bidmp, known_func);
 				std::cout << "\n";
 			}
 			else
