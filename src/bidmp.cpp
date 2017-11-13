@@ -307,6 +307,7 @@ bidmp_ptr read_bidmp(const std::byte* data, std::size_t size)
 typedef std::tuple<std::string_view, i32, i32> version_identifier;
 const std::map<version_identifier, u32> known_function_offsets = {
 	{ { "arma2oaserver.exe", 163, 131129 }, 0x00187177 },
+	{ { "arma2oa.exe", 163, 131129 }, 0x00682476 },
 };
 
 const u32* get_known_function_offset(std::string_view file, i32 version, i32 build)
