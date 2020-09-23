@@ -1,6 +1,0 @@
-[requires]
-Boost.Program_Options/1.65.1@bincrafters/stable
-Boost.Endian/1.65.1@bincrafters/stable
-
-[generators]
-cmake

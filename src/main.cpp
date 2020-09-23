@@ -1,124 +1,121 @@
 #include "bidmp.hpp"
 
-#include <boost/program_options.hpp>
-
 #include <array>
+#include <charconv>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <unordered_map>
 #include <vector>
 
-namespace fs = std::experimental::filesystem;
-namespace po = boost::program_options;
+namespace stdfs = std::filesystem;
 
-int main(int argc, char** argv)
+struct arguments
 {
-	po::variables_map varmap;
+	std::vector<std::string_view> pos;
+	std::unordered_map<std::string_view, std::string_view> map;
 
-	try
+	arguments(const char* const* args, size_t count)
 	{
-		po::options_description options("Usage: bidump <dump file>");
-		options.add_options()
-			("help,h", "Display help message")
-			("input-file", po::value<std::vector<fs::path>>(), "Crash dump file")
-			("known-func", po::value<std::string>(), "RVA of the known function")
-		;
-
-		po::positional_options_description args;
-		args.add("input-file", -1);
-
-		po::store(
-			po::command_line_parser(argc, argv)
-				.options(options)
-				.positional(args)
-				.run(),
-			varmap
-		);
-
-		if (varmap.count("help"))
+		for (size_t i = 0; i < count; ++i)
 		{
-			std::cout << options;
-			return 0;
-		}
-	}
-	catch (po::error& ex)
-	{
-		std::cerr << ex.what() << std::endl;
-		return 1;
-	}
-
-	if (varmap.count("input-file") == 0)
-	{
-		std::cerr << "Expected file name" << std::endl;
-		return 1;
-	}
-
-	std::uint32_t known_func = 0;
-	if (varmap.count("known-func") > 0)
-	{
-		std::string string = varmap["known-func"].as<std::string>();
-
-		try
-		{
-			known_func = std::stoul(string, nullptr, 16);
-		}
-		catch (...)
-		{
-			std::cerr << "Invalid known function address";
-			return 1;
-		}
-	}
-
-	for (auto& path : varmap["input-file"].as<std::vector<fs::path>>())
-	{
-		if (!fs::exists(path))
-		{
-			std::cerr << "File '" << path << "' not found";
-			return 1;
-		}
-
-		if (path.extension() == ".bidmp")
-		{
-			std::vector<std::byte> data;
+			std::string_view string = args[i];
+			if (string.substr(0, 2) == "--")
 			{
-				typedef std::uint8_t int_type;
-				std::basic_ifstream<int_type> stream(
-					path, std::ios::binary);
-				if (stream.fail())
-				{
-					std::cerr << "Cannot open file";
-					return 1;
-				}
-				std::array<int_type, 1024> buffer;
-				std::streamsize size;
+				string.remove_prefix(2);
 
-				while (!stream.eof())
+				std::string_view value;
+				if (size_t eq = string.find('='); eq != string.npos)
 				{
-					stream.read(buffer.data(), buffer.size());
-					auto size = stream.gcount();
-					if (stream.fail() && !stream.eof())
-					{
-						std::cerr << "Error reading file";
-						return 1;
-					}
-					auto offset = data.size();
-					data.resize(offset + size);
-					std::memcpy(data.data() + offset,
-						buffer.data(), size);
+					value = string.substr(eq + 1);
+					string = string.substr(0, eq);
 				}
-			}
-			
-			std::cout << path << ":\n";
-			if (auto bidmp = read_bidmp(data.data(), data.size()))
-			{
-				print_bidmp(std::cout, *bidmp, known_func);
-				std::cout << "\n";
+				else if (i++ < count)
+				{
+					value = args[i];
+				}
+
+				map[string] = value;
 			}
 			else
 			{
-				std::cerr << "Error reading crash dump" << std::endl;
-				return 1;
+				pos.push_back(string);
 			}
 		}
+	}
+
+	bool try_get_arg(std::string_view name, std::string_view* out)
+	{
+		if (auto it = map.find(name); it != map.end())
+		{
+			*out = it->second;
+			return true;
+		}
+		return false;
+	}
+};
+
+template<typename T>
+static bool try_parse(std::string_view string, T* out)
+{
+	auto r = std::from_chars(string.data(), string.data() + string.size(), *out);
+	return r.ec == std::errc{} && r.ptr == string.data() + string.size();
+}
+
+int main(int argc, char** argv)
+{
+	arguments args(argv + 1, argc - 1);
+
+	if (args.map.find("help") != args.map.end())
+	{
+		std::cerr <<
+			"Usage: bidump [options...] file\n"
+			"    help        display help message\n"
+			"    known-addr  relative virtual address of the known function\n";
+		return 1;
+	}
+
+	uint32_t known_addr = 0;
+	if (std::string_view known_addr_string; args.try_get_arg("", &known_addr_string))
+	{
+		if (!try_parse(known_addr_string, &known_addr))
+		{
+			std::cerr << "invalid argument: known-addr\n";
+			return 1;
+		}
+	}
+
+	if (args.pos.size() == 0)
+	{
+		std::cerr << "expected file name\n";
+		return 1;
+	}
+
+	if (args.pos.size() > 1)
+	{
+		std::cerr << "unexpected argument: " << args.pos[1] << '\n';
+		return 1;
+	}
+
+	stdfs::path file_path = args.pos[0];
+
+	if (!stdfs::exists(file_path))
+	{
+		std::cerr << "file not found: " << file_path << '\n';
+		return 1;
+	}
+
+	std::basic_ifstream<std::byte> stream(file_path, std::ios::binary);
+	std::istreambuf_iterator<std::byte> begin(stream), end;
+	std::vector<std::byte> file_data(begin, end);
+
+	if (auto bidmp = read_bidmp(file_data.data(), file_data.size()))
+	{
+		print_bidmp(std::cout, *bidmp, known_addr);
+	}
+	else
+	{
+		std::cerr << "error reading file\n";
+		return 1;
 	}
 }

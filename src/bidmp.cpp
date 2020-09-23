@@ -1,7 +1,5 @@
 #include "bidmp.hpp"
 
-#include "read.hpp"
-
 #include <algorithm>
 #include <array>
 #include <iterator>
@@ -17,8 +15,47 @@
 #include <cstdint>
 #include <cctype>
 
-typedef std::int32_t i32;
-typedef std::uint32_t u32;
+typedef int32_t i32;
+typedef uint32_t u32;
+
+static bool read(const std::byte*& first, const std::byte* last, std::byte& out)
+{
+	if (first == last)
+		return false;
+	out = *first++;
+	return true;
+}
+
+template<typename T>
+static auto read(const std::byte*& first, const std::byte* last, T& out)
+	-> std::enable_if_t<std::is_integral_v<T>, bool>
+{
+	if (last - first < sizeof(T))
+		return false;
+
+	memcpy(&out, first, sizeof(T));
+
+	first += sizeof(T);
+	return true;
+}
+
+template<typename OutputIterator>
+static bool read(const std::byte*& first, const std::byte* last,
+	OutputIterator out_first, OutputIterator out_last)
+{
+	const std::byte* save = first;
+	while (out_first != out_last)
+	{
+		if (first == last)
+		{
+			first = save;
+			return false;
+		}
+
+		read(first, last, *out_first++);
+	}
+	return true;
+}
 
 struct header
 {
@@ -26,13 +63,12 @@ struct header
 	i32 build;
 };
 
-template<typename Iterator>
-bool read(Iterator& first, const Iterator& last, header& out)
+static bool read(const std::byte*& first, const std::byte* last, header& out)
 {
 	constexpr char Magic[] = "STK7";
 	constexpr i32 StkVersion = 103;
 
-	Iterator local = first;
+	const std::byte* local = first;
 
 	char magic[sizeof(Magic) / sizeof(*Magic)];
 	i32 stkVersion;
@@ -98,20 +134,26 @@ struct context
 	std::byte extended_registers[512];
 };
 
-template<typename Iterator>
-bool read(Iterator& first, const Iterator& last, context& out)
+static bool read(const std::byte*& first, const std::byte* last, context& out)
 {
-	Iterator save = first;
+	const std::byte* save = first;
 
 	i32 ctx_size;
-	if (!read(first, last, ctx_size) || ctx_size != sizeof(out) ||
-		(std::size_t)last - (std::size_t)first < sizeof(out))
+	if (!read(first, last, ctx_size) || ctx_size != sizeof(out))
 	{
 		first = save;
 		return false;
 	}
 
-	read(first, last, out.context_flags);
+	if (!read(first, last, (std::byte*)&out, (std::byte*)&out + sizeof(out)))
+	{
+		first = save;
+		return false;
+	}
+
+	return true;
+
+	/*read(first, last, out.context_flags);
 
 	read(first, last, out.dr0);
 	read(first, last, out.dr1);
@@ -159,7 +201,7 @@ bool read(Iterator& first, const Iterator& last, context& out)
 		std::end(out.extended_registers)
 	);
 
-	return true;
+	first = save + ctx_size;*/
 }
 
 struct info
@@ -169,10 +211,9 @@ struct info
 	i32 size;
 };
 
-template<typename Iterator>
-bool read(Iterator& first, const Iterator& last, info& out)
+static bool read(const std::byte*& first, const std::byte* last, info& out)
 {
-	Iterator local = first;
+	const std::byte* local = first;
 
 	i32 length;
 	if (!read(local, last, length))
@@ -215,12 +256,11 @@ struct code
 	> crc;
 };
 
-template<typename Iterator>
-bool read(Iterator& first, const Iterator& last, code& out)
+static bool read(const std::byte*& first, const std::byte* last, code& out)
 {
 	constexpr std::size_t PageSize = 4096;
 
-	Iterator local = first;
+	const std::byte* local = first;
 
 	if (!read(local, last, out.base) ||
 		!read(local, last, out.size) ||
@@ -244,10 +284,9 @@ struct stack
 	> data;
 };
 
-template<typename Iterator>
-bool read(Iterator& first, const Iterator& last, stack& out)
+static bool read(const std::byte*& first, const std::byte* last, stack& out)
 {
-	Iterator local = first;
+	const std::byte* local = first;
 
 	i32 size;
 	if (!read(local, last, out.base) ||
@@ -307,7 +346,9 @@ bidmp_ptr read_bidmp(const std::byte* data, std::size_t size)
 typedef std::tuple<std::string_view, i32, i32> version_identifier;
 const std::map<version_identifier, u32> known_function_offsets = {
 	{ { "arma2oaserver.exe", 163, 131129 }, 0x00187177 },
-	{ { "arma2oa.exe", 163, 131129 }, 0x00682476 },
+	{ { "arma2oaserver.exe", 164, 144629 }, 0x00131c4b },
+	{ { "arma2oa.exe", 163, 131129 }, 0x00282476 },
+	{ { "arma2oa.exe", 164, 144629 }, 0x002c7691 }
 };
 
 const u32* get_known_function_offset(std::string_view file, i32 version, i32 build)
@@ -445,7 +486,7 @@ std::ostream& print_bidmp(std::ostream& os, const bidmp& b, std::uint32_t known_
 
 	auto stack_first = b.stack.data.data(),
 		stack_last = b.stack.data.data() + b.stack.data.size();
-	u32 addr = b.stack.base - b.stack.data.size();
+	u32 addr = b.stack.base - (u32)b.stack.data.size();
 	
 	os << i << "Stack:" << lf;
 	++i;
