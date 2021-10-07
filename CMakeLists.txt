@@ -16,5 +16,4 @@ set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/lib")
 add_executable(bidump
 	src/main.cpp
 	src/bidmp.cpp
-	src/mdmp.cpp
 )
