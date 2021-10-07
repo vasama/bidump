@@ -112,24 +112,24 @@ struct context
 
 	floating_save_area fsa;
 
-	u32 eax;
-	u32 ebx;
-	u32 ecx;
-	u32 edx;
-	u32 esi;
-	u32 edi;
-	u32 ebp;
-	u32 esp;
-	u32 eip;
-
 	u32 seg_gs;
 	u32 seg_fs;
 	u32 seg_es;
 	u32 seg_ds;
-	u32 seg_cs;
-	u32 seg_ss;
 
+	u32 edi;
+	u32 esi;
+	u32 ebx;
+	u32 edx;
+	u32 ecx;
+	u32 eax;
+
+	u32 ebp;
+	u32 eip;
+	u32 seg_cs;
 	u32 eflags;
+	u32 esp;
+	u32 seg_ss;
 
 	std::byte extended_registers[512];
 };
@@ -445,7 +445,7 @@ std::ostream& print_bidmp(std::ostream& os, const bidmp& b, std::uint32_t known_
 			os << " @ " << ptr{ (u32)adjust };
 		}
 	}
-	os << lf << lf;
+	os << lf << "known function address: " << ptr{ b.code.func } << lf << lf;
 
 	u32 text_base = adjust == 0 ? 0 : b.code.base;
 	u32 text_size = adjust == 0 ? 0 : b.code.size;
